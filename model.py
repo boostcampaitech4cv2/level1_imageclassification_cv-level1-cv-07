@@ -50,3 +50,42 @@ class MyModel(nn.Module):
         2. 결과로 나온 output 을 return 해주세요
         """
         return x
+
+class CNNModel(nn.Module):
+    def __init__(self, num_classes):
+        super().__init__()
+
+        self.conv2d_1 = nn.Conv2d(3, 32, kernel_size=3, stride=1)
+        self.conv2d_2 = nn.Conv2d(32, 64, kernel_size=3, stride=1)
+        self.conv2d_3 = nn.Conv2d(64, 128, kernel_size=3, stride=1)
+        self.conv2d_4 = nn.Conv2d(128, 128, kernel_size=3, stride=1)
+        self.dropout_1 = nn.Dropout(0.5)
+        self.dropout_2 = nn.Dropout(0.5)
+        self.dropout_3 = nn.Dropout(0.5)
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.flat = nn.Flatten()
+        self.fc_1 = nn.Linear(128, num_classes)
+
+    def forward(self, x):
+        x = self.conv2d_1(x)
+        x = F.relu(x)
+
+        x = self.conv2d_2(x)
+        x = F.relu(x)
+        x = self.dropout_1(x)
+
+        x = self.conv2d_3(x)
+        x = F.relu(x)
+        x = F.max_pool2d(x, 2)
+        x = self.dropout_2(x)
+
+        x = self.conv2d_4(x)
+        x = F.relu(x)
+        x = F.max_pool2d(x, 2)
+        x = self.dropout_3(x)
+
+        x = self.avgpool(x)
+
+        x = self.flat(x)
+        x = self.fc_1(x)
+        return x
