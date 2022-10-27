@@ -16,4 +16,3 @@
 
 ### Evaluation
 - `SM_GROUND_TRUTH_DIR={YOUR_GT_DIR} SM_OUTPUT_DATA_DIR={YOUR_INFERENCE_OUTPUT_DIR} python evaluation.py`
-# level1_imageclassification_cv-level1-cv-07
