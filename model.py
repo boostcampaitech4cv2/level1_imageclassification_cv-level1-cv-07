@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -189,3 +190,22 @@ class AgeGenderClassfication(nn.Module):
         x = F.dropout(x, 0.5, self.training)
 
         return self.fc9(x)
+
+
+class Ensemble(nn.Module):
+    def __init__(self, mask_num_classes, age_gender_num_classes):
+        super().__init__()
+        self.mask_n_cl = mask_num_classes
+        self.age_gende_n_cl = age_gender_num_classes
+
+        self.MaskModel = MaskClassification(mask_num_classes)
+        self.AgeGenderModel = AgeGenderClassfication(age_gender_num_classes)
+
+    def forward(self, x):
+        mask_out = self.MaskModel(x)
+        age_gender_out = self.AgeGenderModel(x)
+
+        # out = mask_out + age_gender_out
+        # print(out.shape)
+
+        return mask_out, age_gender_out
