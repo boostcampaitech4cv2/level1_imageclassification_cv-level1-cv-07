@@ -56,8 +56,8 @@ class CustomAugmentation:
             Resize(resize, Image.BILINEAR),
             ColorJitter(0.1, 0.1, 0.1, 0.1),
             ToTensor(),
-            Normalize(mean=mean, std=std),
-            AddGaussianNoise()
+            Normalize(mean=mean, std=std)
+            # AddGaussianNoise()
         ])
 
     def __call__(self, image):
@@ -106,7 +106,7 @@ class AgeLabels(int, Enum):
 
 
 class MaskBaseDataset(Dataset):
-    # num_classes = 3 * 2 * 3
+    num_classes = 3 * 2 * 3
     mask_num_classes = 3
     age_gender_num_classes = 2 * 3
 
