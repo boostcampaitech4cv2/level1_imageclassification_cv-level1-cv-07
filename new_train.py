@@ -192,7 +192,8 @@ def train(data_dir, model_dir, args):
             optimizer.step()
 
             loss_value += loss.item()
-
+ 
+            # -- 수정
             preds = mask_preds * age_gender_preds
             labels = mask_labels * age_gender_labels
             
