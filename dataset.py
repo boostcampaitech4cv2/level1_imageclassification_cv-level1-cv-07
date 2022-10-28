@@ -106,7 +106,9 @@ class AgeLabels(int, Enum):
 
 
 class MaskBaseDataset(Dataset):
-    num_classes = 3 * 2 * 3
+    # num_classes = 3 * 2 * 3
+    mask_num_classes = 3
+    age_gender_num_classes = 2 * 3
 
     _file_names = {
         "mask1": MaskLabels.MASK,
@@ -181,10 +183,14 @@ class MaskBaseDataset(Dataset):
         mask_label = self.get_mask_label(index)
         gender_label = self.get_gender_label(index)
         age_label = self.get_age_label(index)
-        multi_class_label = self.encode_multi_class(mask_label, gender_label, age_label)
+        # -- before
+        # multi_class_label = self.encode_multi_class(mask_label, gender_label, age_label)
+
+        # -- after
+        multi_class_label = self.encode_multi_class(gender_label, age_label)
 
         image_transform = self.transform(image)
-        return image_transform, multi_class_label
+        return image_transform, (mask_label, multi_class_label)
 
     def __len__(self):
         return len(self.image_paths)
@@ -202,9 +208,15 @@ class MaskBaseDataset(Dataset):
         image_path = self.image_paths[index]
         return Image.open(image_path)
 
+    # -- before
+    # @staticmethod
+    # def encode_multi_class(mask_label, gender_label, age_label) -> int:
+    #     return mask_label * 6 + gender_label * 3 + age_label
+
+    # -- after
     @staticmethod
-    def encode_multi_class(mask_label, gender_label, age_label) -> int:
-        return mask_label * 6 + gender_label * 3 + age_label
+    def encode_multi_class(gender_label, age_label) -> int:
+        return gender_label * 3 + age_label
 
     @staticmethod
     def decode_multi_class(multi_class_label) -> Tuple[MaskLabels, GenderLabels, AgeLabels]:
@@ -242,7 +254,8 @@ class MaskSplitByProfileDataset(MaskBaseDataset):
         구현은 val_ratio 에 맞게 train / val 나누는 것을 이미지 전체가 아닌 사람(profile)에 대해서 진행하여 indexing 을 합니다
         이후 `split_dataset` 에서 index 에 맞게 Subset 으로 dataset 을 분기합니다.
     """
-
+    mask_num_classes = 3
+    age_gender_num_classes = 2 * 3
     def __init__(self, data_dir, mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246), val_ratio=0.2):
         self.indices = defaultdict(list)
         super().__init__(data_dir, mean, std, val_ratio)
