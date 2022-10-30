@@ -53,10 +53,9 @@ class CustomAugmentation:
     def __init__(self, resize, mean, std, **args):
         self.transform = Compose([
             CenterCrop((320, 256)),
-            # Resize(resize, Image.BILINEAR),
+            Resize(resize, Image.BILINEAR),
             RandomAdjustSharpness(sharpness_factor=2),
-            # ColorJitter(0.1, 0.1, 0.1, 0.1),
-            # RandomAutocontrast(),
+            ColorJitter(0.1, 0.1, 0.1, 0.1),
             ToTensor(),
             Normalize(mean=mean, std=std)
             # AddGaussianNoise()
@@ -269,6 +268,7 @@ class MaskSplitByProfileDataset(MaskBaseDataset):
 
         val_indices = set(random.choices(range(length), k=n_val))
         train_indices = set(range(length)) - val_indices
+        print(train_indices)
         return {
             "train": train_indices,
             "val": val_indices
@@ -278,7 +278,8 @@ class MaskSplitByProfileDataset(MaskBaseDataset):
         profiles = os.listdir(self.data_dir)
         profiles = [profile for profile in profiles if not profile.startswith(".")]
         split_profiles = self._split_profile(profiles, self.val_ratio)
-
+        # print(split_profiles)
+        
         cnt = 0
         for phase, indices in split_profiles.items():
             for _idx in indices:
