@@ -270,7 +270,4 @@ class Ensemble(nn.Module):
         mask_out = self.MaskModel(x)
         age_gender_out = self.Dcnn(x)
 
-        # out = mask_out + age_gender_out
-        # print(out.shape)
-
         return mask_out, age_gender_out
