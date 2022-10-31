@@ -141,7 +141,8 @@ def train(data_dir, model_dir, args):
     optimizer = opt_module(
         filter(lambda p: p.requires_grad, model.parameters()),
         lr=args.lr,
-        weight_decay=5e-4
+        weight_decay=5e-4,
+        betas=(0.9,0.99)
     )
     # scheduler = StepLR(optimizer, args.lr_decay_step, gamma=0.5)
     scheduler = ReduceLROnPlateau(optimizer, mode='min')

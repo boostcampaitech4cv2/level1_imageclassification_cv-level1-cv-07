@@ -1,6 +1,6 @@
 import os
 import random
-from collections import defaultdict
+from collections import defaultdict, Counter
 from enum import Enum
 from typing import Tuple, List
 
@@ -57,7 +57,7 @@ class CustomAugmentation:
             RandomAdjustSharpness(sharpness_factor=2),
             ColorJitter(0.1, 0.1, 0.1, 0.1),
             ToTensor(),
-            Normalize(mean=mean, std=std)
+            Normalize(mean=mean, std=std),
             # AddGaussianNoise()
         ])
 
@@ -261,24 +261,101 @@ class MaskSplitByProfileDataset(MaskBaseDataset):
         self.indices = defaultdict(list)
         super().__init__(data_dir, mean, std, val_ratio)
 
-    @staticmethod
-    def _split_profile(profiles, val_ratio):
-        length = len(profiles)
-        n_val = int(length * val_ratio)
+    def _get_label(self, file, gender, age):
+        if 'normal'in file:
+            # Not Wear
+            if gender =='male':
+                if age < 30: 
+                    return 12
+                elif age < 60:
+                    return 13
+                else:
+                    return 14
+            else: # female
+                if age < 30:
+                    return 15
+                elif age < 60:
+                    return 16
+                else:
+                    return 17
+        elif 'incorrect' in file:
+            # Incorrect
+            if gender == 'male':
+                if age < 30: 
+                    return 6
+                elif age < 60:
+                    return 7
+                else:
+                    return 8
+            else: # female
+                if age < 30:
+                    return 9
+                elif age < 60:
+                    return 10
+                else:
+                    return 11
+        else:
+            # Wear
+            if gender == 'male':
+                if age < 30: 
+                    return 0
+                elif age < 60:
+                    return 1
+                else:
+                    return 2
+            else: # female
+                if age < 30:
+                    return 3
+                elif age < 60:
+                    return 4
+                else:
+                    return 5
 
-        val_indices = set(random.choices(range(length), k=n_val))
-        train_indices = set(range(length)) - val_indices
-        print(train_indices)
-        return {
-            "train": train_indices,
-            "val": val_indices
-        }
+    def get_distribution(self, y_vals):
+        y_distr = Counter(y_vals)
+        y_vals_sum = sum(y_distr.values())
+        return [f'{y_distr[i] / y_vals_sum:.2%}' for i in range(np.max(y_vals) + 1)]
+
+    # @staticmethod
+    def _split_profile(self, profiles, val_ratio):
+        # length = len(profiles)
+        # n_val = int(length * val_ratio)
+        # val_indices = set(random.choices(range(length), k=n_val))
+        # train_indices = set(range(length)) - val_indices
+
+        # return {
+        #     "train": train_indices,
+        #     "val": val_indices
+        # }
+
+        train = pd.read_csv('/opt/ml/input/data/train/train.csv')
+        train['label'] = -1
+        
+        for index, row in train.iterrows():
+            for file in os.listdir(f"/opt/ml/input/data/train/images/{row['path']}"):
+                # print(get_label(file, row['gender'], row['age']))
+                train.at[index, 'label'] = self._get_label(file, row['gender'], row['age'])
+        
+        groups = np.array(train.id.values)
+
+        distrs = [self.get_distribution(train.label)]
+        index = ['training set']
+
+        # 4개의 폴드 세트로 분리하는 StratifiedKFold 세트 생성
+        skfold = StratifiedKFold(n_splits=4, shuffle=True, random_state=2022)
+
+        for fold_index, (train_index, test_index) in enumerate(skfold.split(X=train.id, y=train.label)):
+            # print("%s %s" % (train_index, test_index))
+
+            return {
+                "train": set(train_index),
+                "val": set(test_index)
+            }
 
     def setup(self):
         profiles = os.listdir(self.data_dir)
         profiles = [profile for profile in profiles if not profile.startswith(".")]
         split_profiles = self._split_profile(profiles, self.val_ratio)
-        # print(split_profiles)
         
         cnt = 0
         for phase, indices in split_profiles.items():
@@ -314,7 +391,7 @@ class TestDataset(Dataset):
         self.img_paths = img_paths
         self.transform = Compose([
             CenterCrop((320, 256)),
-            # Resize(resize, Image.BILINEAR),
+            Resize(resize, Image.BILINEAR),
             ToTensor(),
             Normalize(mean=mean, std=std),
         ])
