@@ -1,6 +1,7 @@
 ### Dataset
 dataset/
 model/
+output/
 ​
 # macOS + Windows
 .DS_Store
