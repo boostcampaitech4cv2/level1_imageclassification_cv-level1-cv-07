@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from PIL import Image
 from torch.utils.data import Dataset, Subset, random_split
-from torchvision.transforms import Resize, ToTensor, Normalize, Compose, CenterCrop, ColorJitter
+from torchvision.transforms import *
 
 IMG_EXTENSIONS = [
     ".jpg", ".JPG", ".jpeg", ".JPEG", ".png",
@@ -53,8 +53,10 @@ class CustomAugmentation:
     def __init__(self, resize, mean, std, **args):
         self.transform = Compose([
             CenterCrop((320, 256)),
-            Resize(resize, Image.BILINEAR),
-            ColorJitter(0.1, 0.1, 0.1, 0.1),
+            # Resize(resize, Image.BILINEAR),
+            RandomAdjustSharpness(sharpness_factor=2),
+            # ColorJitter(0.1, 0.1, 0.1, 0.1),
+            # RandomAutocontrast(),
             ToTensor(),
             Normalize(mean=mean, std=std)
             # AddGaussianNoise()
@@ -99,14 +101,14 @@ class AgeLabels(int, Enum):
 
         if value < 30:
             return cls.YOUNG
-        elif value < 60:
+        elif value < 58:
             return cls.MIDDLE
         else:
             return cls.OLD
 
 
 class MaskBaseDataset(Dataset):
-    num_classes = 3 * 2 * 3
+    # num_classes = 3 * 2 * 3
     mask_num_classes = 3
     age_gender_num_classes = 2 * 3
 
@@ -310,7 +312,8 @@ class TestDataset(Dataset):
     def __init__(self, img_paths, resize, mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246)):
         self.img_paths = img_paths
         self.transform = Compose([
-            Resize(resize, Image.BILINEAR),
+            CenterCrop((320, 256)),
+            # Resize(resize, Image.BILINEAR),
             ToTensor(),
             Normalize(mean=mean, std=std),
         ])
