@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from PIL import Image
 from torch.utils.data import Dataset, Subset, random_split
-from torchvision.transforms import RandomHorizontalFlip,GaussianBlur,RandomGrayscale, Resize, ToTensor, Normalize, Compose, CenterCrop, ColorJitter, RandomAdjustSharpness
+from torchvision.transforms import RandomHorizontalFlip,GaussianBlur,RandomGrayscale, Resize, ToTensor, Normalize, Compose, CenterCrop, ColorJitter, RandomAdjustSharpness, RandomRotation, RandomAutocontrast
 import pandas as pd
 from sklearn.model_selection import StratifiedKFold
 
@@ -60,9 +60,10 @@ class CustomAugmentation:
                 Resize(resize),
                 # GaussianBlur(51, (0.1, 2.0)),
                 RandomHorizontalFlip(p=0.5),
+                RandomRotation(15),
                 RandomAdjustSharpness(sharpness_factor=2),
                 ColorJitter(0.1, 0.1, 0.1, 0.1),  # todo : param
-                # RandomGrayscale(p=1),
+                RandomAutocontrast(),
                 ToTensor(),
                 Normalize(mean=mean, std=std),
                 # AddGaussianNoise(0., 1.)
