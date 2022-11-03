@@ -188,6 +188,7 @@ def train(data_dir, model_dir, args):
         # train loop
         dataset.set_transform(transform.transformations['train'])
         model.train()
+        dataset.set_transform(transform.transforms['train'])
 
         loss_value = 0
         matches = 0
@@ -240,7 +241,8 @@ def train(data_dir, model_dir, args):
         dataset.set_transform(transform.transformations['val'])
         with torch.no_grad():
             print("Calculating validation results...")
-            
+            dataset.set_transform(transform.transforms['val'])
+
             model.eval()
             
             val_loss_items = []
