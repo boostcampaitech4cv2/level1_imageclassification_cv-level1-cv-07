@@ -35,7 +35,6 @@ class BaseModel(nn.Module):
         x = x.view(-1, 128)
         return self.fc(x)
 
-
 # Custom Model Template
 class MyModel(nn.Module):
     def __init__(self, num_classes):
@@ -123,7 +122,6 @@ class MaskClassification(nn.Module):
         x = x.view(-1, 128)
         return self.fc(x)
 
-
 class AgeGenderClassfication(nn.Module):
     def __init__(self, num_classes):
         super().__init__()
@@ -192,7 +190,6 @@ class AgeGenderClassfication(nn.Module):
         x = F.dropout(x, 0.5, self.training)
 
         return self.fc9(x)
-
 
 class DCNN(nn.Module):
     def __init__(self, num_classes):
@@ -264,20 +261,21 @@ class Ensemble(nn.Module):
         self.mask_n_cl = mask_num_classes
         self.age_gende_n_cl = age_gender_num_classes
 
-        self.MaskModel = MaskClassification(mask_num_classes)
-        self.AgeGenderModel = AgeGenderClassfication(age_gender_num_classes)
+        # self.MaskModel = MaskClassification(mask_num_classes)
+        self.MaskModel = ResNet(mask_num_classes)
+        self.AgeGenderModel = ResNet(age_gender_num_classes)
         self.Dcnn = DCNN(age_gender_num_classes)
 
     def forward(self, x):
         mask_out = self.MaskModel(x)
-        age_gender_out = self.Dcnn(x)
+        age_gender_out = self.AgeGenderModel(x)
 
         return mask_out, age_gender_out
 
 class DensNet(nn.Module):
     def __init__(self, num_classes=1000, num_channels=3):
-        super().__init__()
-        preloaded = torchvision.models.densenet121(pretrained=True)
+        super().__init__()  
+        preloaded = torchvision.models.densenet121(weights='IMAGENET1K_V1') 
         self.features = preloaded.features
         self.features.conv0 = nn.Conv2d(num_channels, 64, 7, 2, 3)
         self.classifier = nn.Linear(1024, num_classes, bias=True)
@@ -293,10 +291,23 @@ class DensNet(nn.Module):
 class CNN_Model(nn.Module):
     def __init__(self, num_classes, rate=0.2):
         super(CNN_Model, self).__init__()
-        self.model = EfficientNet.from_pretrained('efficientnet-b3')
+        self.model = EfficientNet.from_pretrained('efficientnet-b7')
         self.dropout = nn.Dropout(rate)
         self.output_layer = nn.Linear(in_features=1000, out_features=num_classes, bias=True)
 
     def forward(self, inputs):
         output = self.output_layer(self.dropout(self.model(inputs)))
+        return output
+
+class ResNet(nn.Module):
+    def __init__(self, num_classes, rate=0.2):
+        super(ResNet, self).__init__()
+        self.model = torchvision.models.resnet50(weights='IMAGENET1K_V1')
+        self.dropout = nn.Dropout(rate)
+        self.output_layer = nn.Linear(in_features=1000, out_features=num_classes, bias=True)
+        # self.model.fc = nn.Linear(2048, num_classes)
+    def forward(self, inputs):
+        output = self.output_layer(self.dropout(self.model(inputs)))
+        # output = self.output_layer(self.model(inputs))
+        # return self.model(inputs)
         return output

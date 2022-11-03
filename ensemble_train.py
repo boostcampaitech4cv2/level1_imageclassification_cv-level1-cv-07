@@ -11,7 +11,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from torch.optim.lr_scheduler import StepLR
+from torch.optim.lr_scheduler import StepLR,ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
@@ -19,6 +19,9 @@ from model import *
 from dataset import MaskBaseDataset
 from utils import RAdam, AdamW, PlainRAdam
 from loss import create_criterion
+import wandb
+from cutmix.cutmix import CutMix
+from cutmix.utils import CutMixCrossEntropyLoss
 
 
 def seed_everything(seed):
@@ -112,12 +115,16 @@ def train(data_dir, model_dir, args):
         mean=dataset.mean,
         std=dataset.std,
     )
+    # dataset.set_transform(transform)
     dataset.set_transform(transform)
 
     # -- data_loader
     train_set, val_set = dataset.split_dataset()
+    # val_set.dataset.set_transform(transform.transformations['val'])
+    # train_set.dataset.set_transform(transform.transformations['train'])
 
     train_loader = DataLoader(
+        # CutMix(train_set, num_class=9,beta=1.0,prob=0.5,num_mix=2),
         train_set,
         batch_size=args.batch_size,
         num_workers=multiprocessing.cpu_count() // 2,
@@ -134,6 +141,8 @@ def train(data_dir, model_dir, args):
         pin_memory=use_cuda,
         drop_last=True,
     )
+    # wandb
+    # wandb.init(config=args)
 
     # -- model
     model = Ensemble(
@@ -142,11 +151,21 @@ def train(data_dir, model_dir, args):
     ).to(device)
     model = torch.nn.DataParallel(model)
 
-    # -- loss & metric
-    criterion_mask = create_criterion(args.m_criterion)  # default: cross_entropy
-    criterion_age_gender = create_criterion(args.ag_criterion)  # default: focal
+    # wandb.watch(model, log_freq=100)
 
-    # opt_module = getattr(import_module("torch.optim"), args.optimizer)  # default: SGD
+    # -- loss & metric
+    criterion_mask = create_criterion(args.ag_criterion)  # default: cross_entropy
+    criterion_age_gender = create_criterion(args.ag_criterion)  # default: focal
+    # criterion_mask = CutMixCrossEntropyLoss(True)  # default: cross_entropy
+    # criterion_age_gender = CutMixCrossEntropyLoss(True)  # default: focal
+
+    opt_module = getattr(import_module("torch.optim"), args.optimizer)  # default: SGD
+    # optimizer = opt_module(
+    #     filter(lambda p: p.requires_grad, model.parameters()),
+    #     lr=args.lr,
+    #     weight_decay=5e-4,
+    #     betas=(0.9,0.99)
+    # )
 
     # -- optimizer는 utils.py에서 불러옴
     optimizer = RAdam(
@@ -154,7 +173,9 @@ def train(data_dir, model_dir, args):
         lr=args.lr,
         weight_decay=5e-4
     )
-    scheduler = StepLR(optimizer, args.lr_decay_step, gamma=0.5)
+
+    # scheduler = StepLR(optimizer, args.lr_decay_step, gamma=0.5)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min')
 
     # -- logging
     logger = SummaryWriter(log_dir=save_dir)
@@ -165,6 +186,7 @@ def train(data_dir, model_dir, args):
     best_val_loss = np.inf
     for epoch in range(args.epochs):
         # train loop
+        dataset.set_transform(transform.transformations['train'])
         model.train()
 
         loss_value = 0
@@ -212,9 +234,10 @@ def train(data_dir, model_dir, args):
                 loss_value = 0
                 matches = 0
 
-        scheduler.step()
+        # scheduler.step()
 
         # val loop
+        dataset.set_transform(transform.transformations['val'])
         with torch.no_grad():
             print("Calculating validation results...")
             
@@ -236,11 +259,11 @@ def train(data_dir, model_dir, args):
                 age_gender_preds = torch.argmax(age_gender_outs, dim=-1)
 
                 mask_loss_item = criterion_mask(mask_outs, mask_labels).item()
-                age_gender_loss_item = criterion_age_gender(age_gender_outs, age_gender_labels)
+                age_gender_loss_item = criterion_age_gender(age_gender_outs, age_gender_labels).item()
 
-                mask_acc_item = (mask_labels == mask_preds).sum().item()
-                age_gender_acc_item = (age_gender_labels == age_gender_preds).sum().item()
-                print("mask_acc_item:", mask_acc_item, "age_gender_acc_item:", age_gender_acc_item)
+                # mask_acc_item = (mask_labels == mask_preds).sum().item()
+                # age_gender_acc_item = (age_gender_labels == age_gender_preds).sum().item()
+                # print("mask_acc_item:", mask_acc_item, "age_gender_acc_item:", age_gender_acc_item)
 
                 loss_item = mask_loss_item + age_gender_loss_item
                 ## acc_item = mask_acc_item + age_gender_acc_item
@@ -263,6 +286,9 @@ def train(data_dir, model_dir, args):
             val_loss = np.sum(val_loss_items) / len(val_loader)
             val_acc = np.sum(val_acc_items) / len(val_set)
             best_val_loss = min(best_val_loss, val_loss)
+
+            scheduler.step(val_loss)
+
             if val_acc > best_val_acc:
                 print(f"New best model for val accuracy : {val_acc:4.2%}! saving the best model..")
                 torch.save(model.module.state_dict(), f"{save_dir}/best.pth")
@@ -283,12 +309,12 @@ if __name__ == '__main__':
 
     # Data and model checkpoints directories
     parser.add_argument('--seed', type=int, default=42, help='random seed (default: 42)')
-    parser.add_argument('--epochs', type=int, default=90, help='number of epochs to train (default: 1)')
+    parser.add_argument('--epochs', type=int, default=1, help='number of epochs to train (default: 1)')
     parser.add_argument('--dataset', type=str, default='MaskBaseDataset', help='dataset augmentation type (default: MaskBaseDataset)')
     parser.add_argument('--augmentation', type=str, default='BaseAugmentation', help='data augmentation type (default: BaseAugmentation)')
     parser.add_argument("--resize", nargs="+", type=list, default=[224, 224], help='resize size for image when training')
-    parser.add_argument('--batch_size', type=int, default=32, help='input batch size for training (default: 64)')
-    parser.add_argument('--valid_batch_size', type=int, default=1000, help='input batch size for validing (default: 1000)')
+    parser.add_argument('--batch_size', type=int, default=64, help='input batch size for training (default: 64)')
+    parser.add_argument('--valid_batch_size', type=int, default=64, help='input batch size for validing (default: 1000)')
     parser.add_argument('--model', type=str, default='BaseModel', help='model type (default: BaseModel)')
     parser.add_argument('--optimizer', type=str, default='SGD', help='optimizer type (default: SGD)')
     parser.add_argument('--lr', type=float, default=1e-3, help='learning rate (default: 1e-3)')
@@ -304,7 +330,6 @@ if __name__ == '__main__':
     parser.add_argument('--model_dir', type=str, default=os.environ.get('SM_MODEL_DIR', './model'))
 
     args = parser.parse_args()
-    print(args)
 
     data_dir = args.data_dir
     model_dir = args.model_dir

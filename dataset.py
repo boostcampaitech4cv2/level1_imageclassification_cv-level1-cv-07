@@ -8,7 +8,9 @@ import numpy as np
 import torch
 from PIL import Image
 from torch.utils.data import Dataset, Subset, random_split
-from torchvision.transforms import *
+from torchvision.transforms import RandomHorizontalFlip,GaussianBlur,RandomGrayscale, Resize, ToTensor, Normalize, Compose, CenterCrop, ColorJitter, RandomAdjustSharpness
+import pandas as pd
+from sklearn.model_selection import StratifiedKFold
 
 IMG_EXTENSIONS = [
     ".jpg", ".JPG", ".jpeg", ".JPEG", ".png",
@@ -23,7 +25,7 @@ def is_image_file(filename):
 class BaseAugmentation:
     def __init__(self, resize, mean, std, **args):
         self.transform = Compose([
-            Resize(resize, Image.BILINEAR),
+            Resize(resize),
             ToTensor(),
             Normalize(mean=mean, std=std),
         ])
@@ -50,19 +52,31 @@ class AddGaussianNoise(object):
 
 
 class CustomAugmentation:
-    def __init__(self, resize, mean, std, **args):
-        self.transform = Compose([
-            CenterCrop((320, 256)),
-            Resize(resize, Image.BILINEAR),
-            RandomAdjustSharpness(sharpness_factor=2),
-            ColorJitter(0.1, 0.1, 0.1, 0.1),
-            ToTensor(),
-            Normalize(mean=mean, std=std),
-            # AddGaussianNoise()
-        ])
+    def __init__(self, need=('train', 'val'), resize=(128,96), mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246), **args):
+        self.transformations = {}
+        if 'train' in need:
+            self.transformations['train'] = Compose([
+                CenterCrop((320, 256)),
+                Resize(resize),
+                # GaussianBlur(51, (0.1, 2.0)),
+                RandomHorizontalFlip(p=0.5),
+                RandomAdjustSharpness(sharpness_factor=2),
+                ColorJitter(0.1, 0.1, 0.1, 0.1),  # todo : param
+                # RandomGrayscale(p=1),
+                ToTensor(),
+                Normalize(mean=mean, std=std),
+                # AddGaussianNoise(0., 1.)
+            ])
+        if 'val' in need:
+            self.transformations['val'] = Compose([
+                CenterCrop((320, 256)),
+                Resize(resize),
+                ToTensor(),
+                Normalize(mean=mean, std=std),
+            ])
 
     def __call__(self, image):
-        return self.transform(image)
+        return self.transformations(image)
 
 
 class MaskLabels(int, Enum):
@@ -107,9 +121,9 @@ class AgeLabels(int, Enum):
 
 
 class MaskBaseDataset(Dataset):
-    # num_classes = 3 * 2 * 3
-    mask_num_classes = 3
-    age_gender_num_classes = 2 * 3
+    num_classes = 3 * 2 * 3
+    # mask_num_classes = 3
+    # age_gender_num_classes = 2 * 3
 
     _file_names = {
         "mask1": MaskLabels.MASK,
@@ -177,6 +191,7 @@ class MaskBaseDataset(Dataset):
     def set_transform(self, transform):
         self.transform = transform
 
+
     def __getitem__(self, index):
         assert self.transform is not None, ".set_tranform 메소드를 이용하여 transform 을 주입해주세요"
 
@@ -185,13 +200,14 @@ class MaskBaseDataset(Dataset):
         gender_label = self.get_gender_label(index)
         age_label = self.get_age_label(index)
         # -- before
-        # multi_class_label = self.encode_multi_class(mask_label, gender_label, age_label)
+        multi_class_label = self.encode_multi_class(mask_label, gender_label, age_label)
 
         # -- after
-        multi_class_label = self.encode_multi_class(gender_label, age_label)
+        # multi_class_label = self.encode_multi_class(gender_label, age_label)
 
         image_transform = self.transform(image)
-        return image_transform, (mask_label, multi_class_label)
+
+        return image_transform, multi_class_label
 
     def __len__(self):
         return len(self.image_paths)
@@ -210,14 +226,14 @@ class MaskBaseDataset(Dataset):
         return Image.open(image_path)
 
     # -- before
-    # @staticmethod
-    # def encode_multi_class(mask_label, gender_label, age_label) -> int:
-    #     return mask_label * 6 + gender_label * 3 + age_label
+    @staticmethod
+    def encode_multi_class(mask_label, gender_label, age_label) -> int:
+        return mask_label * 6 + gender_label * 3 + age_label
 
     # -- after
-    @staticmethod
-    def encode_multi_class(gender_label, age_label) -> int:
-        return gender_label * 3 + age_label
+    # @staticmethod
+    # def encode_multi_class(gender_label, age_label) -> int:
+    #     return gender_label * 3 + age_label
 
     @staticmethod
     def decode_multi_class(multi_class_label) -> Tuple[MaskLabels, GenderLabels, AgeLabels]:
@@ -255,8 +271,8 @@ class MaskSplitByProfileDataset(MaskBaseDataset):
         구현은 val_ratio 에 맞게 train / val 나누는 것을 이미지 전체가 아닌 사람(profile)에 대해서 진행하여 indexing 을 합니다
         이후 `split_dataset` 에서 index 에 맞게 Subset 으로 dataset 을 분기합니다.
     """
-    mask_num_classes = 3
-    age_gender_num_classes = 2 * 3
+    # mask_num_classes = 3
+    # age_gender_num_classes = 2 * 3
     def __init__(self, data_dir, mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246), val_ratio=0.2):
         self.indices = defaultdict(list)
         super().__init__(data_dir, mean, std, val_ratio)
@@ -348,7 +364,7 @@ class MaskSplitByProfileDataset(MaskBaseDataset):
             # print("%s %s" % (train_index, test_index))
 
             return {
-                "train": set(train_index),
+                "train": set(train_index), 
                 "val": set(test_index)
             }
 
@@ -391,7 +407,7 @@ class TestDataset(Dataset):
         self.img_paths = img_paths
         self.transform = Compose([
             CenterCrop((320, 256)),
-            Resize(resize, Image.BILINEAR),
+            Resize(resize),
             ToTensor(),
             Normalize(mean=mean, std=std),
         ])
